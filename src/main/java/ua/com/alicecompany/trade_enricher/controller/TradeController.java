@@ -23,10 +23,9 @@ public class TradeController {
     @PostMapping(value = "/enrich", produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
     public ResponseEntity<StreamingResponseBody> enrichTrades(@RequestParam("file") MultipartFile file) {
         StreamingResponseBody stream = outputStream -> {
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream()));
-                 PrintWriter writer = new PrintWriter(outputStream)) {
-                CompletableFuture<Void> future = tradeService.processTradesAsync(reader, writer);
-                future.join(); // Дожидаемся завершения
+            try (PrintWriter writer = new PrintWriter(outputStream)) {
+                CompletableFuture<Void> future = tradeService.processTradesAsync(file.getInputStream(), writer);
+                future.join(); // Wait for completion
             } catch (Exception e) {
                 e.printStackTrace();
             }

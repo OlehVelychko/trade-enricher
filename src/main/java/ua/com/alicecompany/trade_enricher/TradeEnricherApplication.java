@@ -10,8 +10,8 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import java.util.concurrent.Executor;
 
 @SpringBootApplication
-@EnableCaching // Включаем кэш Redis
-@EnableAsync   // Включаем асинхронную обработку
+@EnableCaching // Enable Redis caching
+@EnableAsync   // Enable asynchronous processing
 public class TradeEnricherApplication {
 	public static void main(String[] args) {
 		SpringApplication.run(TradeEnricherApplication.class, args);

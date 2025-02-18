@@ -1,15 +1,16 @@
 package ua.com.alicecompany.trade_enricher.service;
 
-import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.CSVParser;
-import org.apache.commons.csv.CSVRecord;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import ua.com.alicecompany.trade_enricher.model.Trade;
+import ua.com.alicecompany.trade_enricher.parser.DataParser;
+
 import java.io.*;
-import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -17,38 +18,35 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Service
 public class TradeService {
     private final StringRedisTemplate redisTemplate;
-    private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyyMMdd");
+    private final DataParser dataParser; // Dependency Injection for DataParser
 
-    public TradeService(StringRedisTemplate redisTemplate) {
+    // Constructor explicitly specifying csvDataParser with @Qualifier
+    public TradeService(StringRedisTemplate redisTemplate, @Qualifier("csvDataParser") DataParser dataParser) {
         this.redisTemplate = redisTemplate;
+        this.dataParser = dataParser;
     }
 
     @Async
-    public CompletableFuture<Void> processTradesAsync(BufferedReader reader, PrintWriter writer) {
+    public CompletableFuture<Void> processTradesAsync(InputStream inputStream, PrintWriter writer) {
         return CompletableFuture.runAsync(() -> {
             AtomicInteger processedLines = new AtomicInteger(0);
             Set<String> missingProducts = new HashSet<>();
             Set<String> uniqueTrades = new HashSet<>();
 
-            try (CSVParser parser = new CSVParser(reader, CSVFormat.DEFAULT.withFirstRecordAsHeader().withTrim());
-                 BufferedWriter bufferedWriter = new BufferedWriter(writer)) {
+            try (BufferedWriter bufferedWriter = new BufferedWriter(writer)) {
+                List<Trade> trades = dataParser.parseData(inputStream); // Using DataParser to process data
 
-                for (CSVRecord record : parser) {
+                for (Trade trade : trades) {
                     try {
-                        String date = record.get("date");
-                        String productId = record.get("productId");
-                        String currency = record.get("currency");
-                        String price = record.get("price");
-
-                        if (!isValidDate(date)) {
-                            System.err.println("❌ Invalid date format: " + date);
-                            continue;
-                        }
+                        String date = formatDate(trade.getDate());
+                        String productId = String.valueOf(trade.getProductId());
+                        String currency = trade.getCurrency();
+                        String price = trade.getPrice().toString();
 
                         String productName = redisTemplate.opsForValue().get("product:" + productId);
                         if (productName == null) {
                             if (!missingProducts.contains(productId)) {
-                                System.err.println("⚠️ Missing mapping for productId: " + productId);
+                                System.err.println("Missing mapping for productId: " + productId);
                                 missingProducts.add(productId);
                             }
                             productName = "Missing Product Name";
@@ -63,28 +61,24 @@ public class TradeService {
 
                         if (processedLines.incrementAndGet() % 10000 == 0) {
                             bufferedWriter.flush();
-                            System.out.println("✅ Processed lines: " + processedLines.get());
+                            System.out.println("Processed lines: " + processedLines.get());
                         }
                     } catch (Exception e) {
-                        System.err.println("🚨 Error processing record: " + record);
+                        System.err.println("Error processing trade: " + trade);
                     }
                 }
 
-                bufferedWriter.flush(); // Финальный flush
-                System.out.println("🏁 Total processed lines: " + processedLines.get());
+                bufferedWriter.flush(); // Final flush
+                System.out.println("Total processed lines: " + processedLines.get());
             } catch (IOException e) {
                 e.printStackTrace();
             }
         });
     }
 
-    private boolean isValidDate(String date) {
-        try {
-            DATE_FORMAT.setLenient(false);
-            DATE_FORMAT.parse(date);
-            return true;
-        } catch (ParseException e) {
-            return false;
-        }
+    // Method for formatting date into a string
+    private String formatDate(java.util.Date date) {
+        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyyMMdd");
+        return dateFormat.format(date);
     }
 }
