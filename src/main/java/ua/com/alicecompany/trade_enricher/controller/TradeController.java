@@ -9,6 +9,7 @@ import ua.com.alicecompany.trade_enricher.service.TradeService;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import java.io.*;
+import java.util.concurrent.CompletableFuture;
 
 @RestController
 @RequestMapping("/api/v1/trades")
@@ -24,7 +25,8 @@ public class TradeController {
         StreamingResponseBody stream = outputStream -> {
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream()));
                  PrintWriter writer = new PrintWriter(outputStream)) {
-                tradeService.processTrades(reader, writer);
+                CompletableFuture<Void> future = tradeService.processTradesAsync(reader, writer);
+                future.join(); // Дожидаемся завершения
             } catch (Exception e) {
                 e.printStackTrace();
             }

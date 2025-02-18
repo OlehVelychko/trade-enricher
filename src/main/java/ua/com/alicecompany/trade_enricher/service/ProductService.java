@@ -27,7 +27,7 @@ public class ProductService {
             br.readLine(); // Пропускаем заголовок
 
             Map<String, String> batchInsert = new HashMap<>();
-            int batchSize = 5000; // Добавляем в Redis по 5000 строк за раз
+            int batchSize = 5000;
 
             while ((line = br.readLine()) != null) {
                 String[] parts = line.split(",");
@@ -35,14 +35,12 @@ public class ProductService {
                     batchInsert.put("product:" + parts[0], parts[1]);
                 }
 
-                // Если достигли batchSize → вставляем в Redis пачку
                 if (batchInsert.size() >= batchSize) {
                     redisTemplate.opsForValue().multiSet(batchInsert);
                     batchInsert.clear();
                 }
             }
 
-            // Записываем оставшиеся записи
             if (!batchInsert.isEmpty()) {
                 redisTemplate.opsForValue().multiSet(batchInsert);
             }

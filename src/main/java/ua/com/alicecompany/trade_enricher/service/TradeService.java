@@ -4,13 +4,14 @@ import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-
 import java.io.*;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
@@ -22,54 +23,59 @@ public class TradeService {
         this.redisTemplate = redisTemplate;
     }
 
-    public void processTrades(BufferedReader reader, PrintWriter writer) throws IOException {
-        AtomicInteger processedLines = new AtomicInteger(0);
-        Set<String> missingProducts = new HashSet<>();
-        Set<String> uniqueTrades = new HashSet<>();
+    @Async
+    public CompletableFuture<Void> processTradesAsync(BufferedReader reader, PrintWriter writer) {
+        return CompletableFuture.runAsync(() -> {
+            AtomicInteger processedLines = new AtomicInteger(0);
+            Set<String> missingProducts = new HashSet<>();
+            Set<String> uniqueTrades = new HashSet<>();
 
-        try (CSVParser parser = new CSVParser(reader, CSVFormat.DEFAULT.withFirstRecordAsHeader().withTrim());
-             BufferedWriter bufferedWriter = new BufferedWriter(writer)) {
+            try (CSVParser parser = new CSVParser(reader, CSVFormat.DEFAULT.withFirstRecordAsHeader().withTrim());
+                 BufferedWriter bufferedWriter = new BufferedWriter(writer)) {
 
-            for (CSVRecord record : parser) {
-                try {
-                    String date = record.get("date");
-                    String productId = record.get("productId");
-                    String currency = record.get("currency");
-                    String price = record.get("price");
+                for (CSVRecord record : parser) {
+                    try {
+                        String date = record.get("date");
+                        String productId = record.get("productId");
+                        String currency = record.get("currency");
+                        String price = record.get("price");
 
-                    if (!isValidDate(date)) {
-                        System.err.println("❌ Invalid date format: " + date);
-                        continue;
-                    }
-
-                    String productName = redisTemplate.opsForValue().get("product:" + productId);
-                    if (productName == null) {
-                        if (!missingProducts.contains(productId)) {
-                            System.err.println("⚠️ Missing mapping for productId: " + productId);
-                            missingProducts.add(productId);
+                        if (!isValidDate(date)) {
+                            System.err.println("❌ Invalid date format: " + date);
+                            continue;
                         }
-                        productName = "Missing Product Name";
-                    }
 
-                    String tradeEntry = String.join(",", date, productName, currency, price);
-                    if (!uniqueTrades.contains(tradeEntry)) {
-                        uniqueTrades.add(tradeEntry);
-                        bufferedWriter.write(tradeEntry);
-                        bufferedWriter.newLine();
-                    }
+                        String productName = redisTemplate.opsForValue().get("product:" + productId);
+                        if (productName == null) {
+                            if (!missingProducts.contains(productId)) {
+                                System.err.println("⚠️ Missing mapping for productId: " + productId);
+                                missingProducts.add(productId);
+                            }
+                            productName = "Missing Product Name";
+                        }
 
-                    if (processedLines.incrementAndGet() % 10000 == 0) {
-                        bufferedWriter.flush();
-                        System.out.println("✅ Processed lines: " + processedLines.get());
+                        String tradeEntry = String.join(",", date, productName, currency, price);
+                        if (!uniqueTrades.contains(tradeEntry)) {
+                            uniqueTrades.add(tradeEntry);
+                            bufferedWriter.write(tradeEntry);
+                            bufferedWriter.newLine();
+                        }
+
+                        if (processedLines.incrementAndGet() % 10000 == 0) {
+                            bufferedWriter.flush();
+                            System.out.println("✅ Processed lines: " + processedLines.get());
+                        }
+                    } catch (Exception e) {
+                        System.err.println("🚨 Error processing record: " + record);
                     }
-                } catch (Exception e) {
-                    System.err.println("🚨 Error processing record: " + record);
                 }
-            }
 
-            bufferedWriter.flush(); // Финальный flush
-            System.out.println("🏁 Total processed lines: " + processedLines.get());
-        }
+                bufferedWriter.flush(); // Финальный flush
+                System.out.println("🏁 Total processed lines: " + processedLines.get());
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        });
     }
 
     private boolean isValidDate(String date) {
