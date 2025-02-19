@@ -84,7 +84,9 @@ curl -X POST -F "file=@src/main/resources/trade.xml" -H "Content-Type: applicati
   - `src/main/resources/trade.csv`
 - You can download **middleSizeTrade.csv** from:
   [Download Here](https://drive.google.com/file/d/1M_ln1KKICQkoV8S8RBsB7XLaHHknDZvA/view)
-- Ensure test files are placed in `src/main/resources` for local testing.
+- Ensure test files are placed in `src/main/resources` for local testing
+- Screenshots of test results can be found here:
+  [Download Here](https://drive.google.com/drive/folders/13195rwptTe00va2o4otBbz1Rct-vGxVb?usp=sharing)
 
 ## What Could Be Improved
 
