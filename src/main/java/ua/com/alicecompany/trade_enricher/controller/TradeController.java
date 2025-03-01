@@ -10,6 +10,7 @@ import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBo
 
 import java.io.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 @RestController
 @RequestMapping("/api/v1/trades")
@@ -21,13 +22,19 @@ public class TradeController {
     }
 
     @PostMapping(value = "/enrich", produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
-    public ResponseEntity<StreamingResponseBody> enrichTrades(@RequestParam("file") MultipartFile file) {
+    public ResponseEntity<StreamingResponseBody> enrichTrades(
+            @RequestParam("file") MultipartFile file,
+            @RequestHeader(value = "Content-Type", defaultValue = "text/csv") String contentType) {
+
         StreamingResponseBody stream = outputStream -> {
             try (PrintWriter writer = new PrintWriter(outputStream)) {
-                CompletableFuture<Void> future = tradeService.processTradesAsync(file.getInputStream(), writer);
-                future.join(); // Wait for completion
-            } catch (Exception e) {
-                e.printStackTrace();
+                CompletableFuture<Void> future = tradeService.processTradesAsync(file.getInputStream(), writer, contentType);
+                future.get();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException("Processing interrupted", e);
+            } catch (ExecutionException e) {
+                throw new IOException("Error processing trades", e.getCause());
             }
         };
 

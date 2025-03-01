@@ -1,11 +1,13 @@
 package ua.com.alicecompany.trade_enricher.service;
 
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import ua.com.alicecompany.trade_enricher.model.Trade;
 import ua.com.alicecompany.trade_enricher.parser.DataParser;
+import ua.com.alicecompany.trade_enricher.parser.ParserFactory;
 
 import java.io.*;
 import java.text.SimpleDateFormat;
@@ -17,24 +19,26 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
 public class TradeService {
+    private static final Logger logger = LoggerFactory.getLogger(TradeService.class);
     private final StringRedisTemplate redisTemplate;
-    private final DataParser dataParser; // Dependency Injection for DataParser
+    private final ParserFactory parserFactory;
 
-    // Constructor explicitly specifying csvDataParser with @Qualifier
-    public TradeService(StringRedisTemplate redisTemplate, @Qualifier("csvDataParser") DataParser dataParser) {
+    public TradeService(StringRedisTemplate redisTemplate, ParserFactory parserFactory) {
         this.redisTemplate = redisTemplate;
-        this.dataParser = dataParser;
+        this.parserFactory = parserFactory;
     }
 
     @Async
-    public CompletableFuture<Void> processTradesAsync(InputStream inputStream, PrintWriter writer) {
+    public CompletableFuture<Void> processTradesAsync(InputStream inputStream, PrintWriter writer, String contentType) {
         return CompletableFuture.runAsync(() -> {
             AtomicInteger processedLines = new AtomicInteger(0);
             Set<String> missingProducts = new HashSet<>();
             Set<String> uniqueTrades = new HashSet<>();
+            boolean hasErrors = false;
 
             try (BufferedWriter bufferedWriter = new BufferedWriter(writer)) {
-                List<Trade> trades = dataParser.parseData(inputStream); // Using DataParser to process data
+                DataParser dataParser = parserFactory.getParser(contentType);
+                List<Trade> trades = dataParser.parseData(inputStream);
 
                 for (Trade trade : trades) {
                     try {
@@ -45,38 +49,40 @@ public class TradeService {
 
                         String productName = redisTemplate.opsForValue().get("product:" + productId);
                         if (productName == null) {
-                            if (!missingProducts.contains(productId)) {
-                                System.err.println("Missing mapping for productId: " + productId);
-                                missingProducts.add(productId);
+                            if (missingProducts.add(productId)) {
+                                logger.warn("Missing mapping for productId: {}", productId);
                             }
                             productName = "Missing Product Name";
                         }
 
                         String tradeEntry = String.join(",", date, productName, currency, price);
-                        if (!uniqueTrades.contains(tradeEntry)) {
-                            uniqueTrades.add(tradeEntry);
+                        if (uniqueTrades.add(tradeEntry)) {
                             bufferedWriter.write(tradeEntry);
                             bufferedWriter.newLine();
                         }
 
                         if (processedLines.incrementAndGet() % 10000 == 0) {
                             bufferedWriter.flush();
-                            System.out.println("Processed lines: " + processedLines.get());
+                            logger.info("Processed lines: {}", processedLines.get());
                         }
                     } catch (Exception e) {
-                        System.err.println("Error processing trade: " + trade);
+                        hasErrors = true;
+                        logger.error("Error processing trade: {}", trade, e);
                     }
                 }
 
-                bufferedWriter.flush(); // Final flush
-                System.out.println("Total processed lines: " + processedLines.get());
+                bufferedWriter.flush();
+                logger.info("Total processed lines: {}", processedLines.get());
             } catch (IOException e) {
-                e.printStackTrace();
+                logger.error("Error writing trades to output", e);
+            } finally {
+                if (hasErrors) {
+                    throw new RuntimeException("Errors occurred during trade processing");
+                }
             }
         });
     }
 
-    // Method for formatting date into a string
     private String formatDate(java.util.Date date) {
         SimpleDateFormat dateFormat = new SimpleDateFormat("yyyyMMdd");
         return dateFormat.format(date);
