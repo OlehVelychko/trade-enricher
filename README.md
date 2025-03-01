@@ -1,28 +1,48 @@
 # Trade Enricher Service
 
 ## Description
-This project provides a Spring Boot service for enriching trade data using product names from a static file. It supports CSV, JSON, and XML formats, allowing efficient trade enrichment and validation.
+This project provides a Spring Boot service for enriching trade data using product names from a Redis-backed product database. It supports CSV, JSON, and XML formats, ensuring efficient trade enrichment, validation, and error handling.
 
 ## Features
 
 1. **Trade Data Enrichment**
-   - Reads trade files and enriches them with product names from a Redis-backed product database.
-   - Supports large datasets efficiently using asynchronous processing.
+   - Reads trade files and enriches them with product names using a Redis-backed database.
+   - Efficiently handles large datasets with asynchronous processing.
    
 2. **File Format Support**
    - Accepts input in **CSV, JSON, and XML** formats.
-   - Automatically detects and processes files based on content type.
+   - Uses a **Parser Factory** to dynamically select the appropriate parser based on content type.
 
 3. **Asynchronous Processing**
-   - Uses `CompletableFuture` for non-blocking execution.
-   - Allows efficient handling of large files.
+   - Implements `CompletableFuture` for non-blocking execution.
+   - Optimized for handling large files without performance bottlenecks.
 
 4. **Streaming Response**
-   - Streams enriched trade data back to the client without consuming excessive memory.
+   - Streams enriched trade data back to the client in real-time to prevent memory overload.
 
 5. **Validation & Error Handling**
-   - Ensures date format validity (`yyyyMMdd`).
+   - Ensures date format validity (`yyyyMMdd`), skipping invalid records instead of failing.
    - Logs missing product mappings and assigns "Missing Product Name" where necessary.
+   - Improved CSV parsing with **safe date handling**.
+
+6. **Enhanced Logging**
+   - Uses **SLF4J** instead of `System.out.println` for consistent and configurable logging.
+
+## Recent Enhancements
+
+- **Added Comprehensive Testing:**
+  - Unit tests: `TradeServiceTest`, `ProductServiceTest`.
+  - Integration test: `TradeControllerTest`.
+  - Uses **Mockito** for mocking dependencies and **Awaitility** for async testing.
+
+- **Improved CSV Error Handling:**
+  - Skips invalid rows instead of throwing exceptions, ensuring robust data processing.
+
+- **Implemented Parser Factory:**
+  - Dynamically selects the appropriate parser (`CsvDataParser`, `JsonDataParser`, `XmlDataParser`) based on the file's content type.
+
+- **Logging Enhancement:**
+  - Removed `System.out.println`, replaced with SLF4J's `Logger` for better maintainability and debugging.
 
 ## Technologies Used
 
@@ -84,14 +104,26 @@ curl -X POST -F "file=@src/main/resources/trade.xml" -H "Content-Type: applicati
   - `src/main/resources/trade.csv`
 - You can download **middleSizeTrade.csv** from:
   [Download Here](https://drive.google.com/file/d/1M_ln1KKICQkoV8S8RBsB7XLaHHknDZvA/view)
-- Ensure test files are placed in `src/main/resources` for local testing
-- Screenshots of test results can be found here:
-  [Download Here](https://drive.google.com/drive/folders/13195rwptTe00va2o4otBbz1Rct-vGxVb?usp=sharing)
+- Ensure test files are placed in `src/main/resources` for local testing.
+
+## Running Tests
+
+To execute all tests:
+```sh
+mvn test
+```
+
+### Test Coverage:
+- **Unit Tests:**
+  - `TradeServiceTest`
+  - `ProductServiceTest`
+- **Integration Test:**
+  - `TradeControllerTest`
 
 ## What Could Be Improved
 
-⚡ **Parser Factory**
-   - Implement a factory pattern to dynamically select the appropriate parser based on `Content-Type`.
+⚡ **Extended Parser Factory**
+   - Support more file formats beyond CSV, JSON, and XML.
 
 ⚡ **Reactive Streams**
    - Replace `CompletableFuture` with **Reactor Flux** for better reactive streaming.
@@ -99,3 +131,15 @@ curl -X POST -F "file=@src/main/resources/trade.xml" -H "Content-Type: applicati
 
 ⚡ **Distributed Processing**
    - Introduce Kafka or RabbitMQ for event-driven trade processing.
+
+## Contributing
+
+Contributions are welcome! Please fork the repository and submit a pull request for any enhancements or bug fixes.
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+## Acknowledgements
+
+Special thanks to the open-source community for providing tools and libraries that make this project possible.
